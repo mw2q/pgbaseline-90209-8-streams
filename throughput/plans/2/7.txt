@@ -1,0 +1,76 @@
+BEGIN;
+BEGIN
+EXPLAIN
+select
+	supp_nation,
+	cust_nation,
+	l_year,
+	sum(volume) as revenue
+from
+	(
+		select
+			n1.n_name as supp_nation,
+			n2.n_name as cust_nation,
+			extract(year from l_shipdate) as l_year,
+			l_extendedprice * (1 - l_discount) as volume
+		from
+			supplier,
+			lineitem,
+			orders,
+			customer,
+			nation n1,
+			nation n2
+		where
+			s_suppkey = l_suppkey
+			and o_orderkey = l_orderkey
+			and c_custkey = o_custkey
+			and s_nationkey = n1.n_nationkey
+			and c_nationkey = n2.n_nationkey
+			and (
+				(n1.n_name = 'INDIA' and n2.n_name = 'ARGENTINA')
+				or (n1.n_name = 'ARGENTINA' and n2.n_name = 'INDIA')
+			)
+			and l_shipdate between date '1995-01-01' and date '1996-12-31'
+	) as shipping
+group by
+	supp_nation,
+	cust_nation,
+	l_year
+order by
+	supp_nation,
+	cust_nation,
+	l_year;
+                                                                                                   QUERY PLAN                                                                                                    
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate  (cost=2347107.10..2348990.28 rows=57944 width=64)
+   ->  Sort  (cost=2347107.10..2347251.96 rows=57944 width=64)
+         Sort Key: n1.n_name, n2.n_name, (date_part('year'::text, (lineitem.l_shipdate)::timestamp without time zone))
+         ->  Hash Join  (cost=891777.38..2342523.04 rows=57944 width=64)
+               Hash Cond: ((lineitem.l_suppkey = supplier.s_suppkey) AND (n1.n_nationkey = supplier.s_nationkey))
+               ->  Hash Join  (cost=887098.38..2307991.08 rows=1449190 width=72)
+                     Hash Cond: (lineitem.l_orderkey = orders.o_orderkey)
+                     ->  Bitmap Heap Scan on lineitem  (cost=384476.93..1722892.57 rows=18129376 width=20)
+                           Recheck Cond: ((l_shipdate >= '1995-01-01'::date) AND (l_shipdate <= '1996-12-31'::date))
+                           ->  Bitmap Index Scan on lineitem_l_shipdate_l_suppkey__idx  (cost=0.00..379944.59 rows=18129376 width=0)
+                                 Index Cond: ((l_shipdate >= '1995-01-01'::date) AND (l_shipdate <= '1996-12-31'::date))
+                     ->  Hash  (cost=487618.47..487618.47 rows=1200238 width=60)
+                           ->  Hash Join  (cost=15638.06..487618.47 rows=1200238 width=60)
+                                 Hash Cond: (orders.o_custkey = customer.c_custkey)
+                                 ->  Seq Scan on orders  (cost=0.00..403671.84 rows=15014984 width=8)
+                                 ->  Hash  (cost=14139.26..14139.26 rows=119904 width=60)
+                                       ->  Nested Loop  (cost=905.09..14139.26 rows=119904 width=60)
+                                             ->  Nested Loop  (cost=0.00..28.00 rows=2 width=60)
+                                                   Join Filter: (((n1.n_name = 'INDIA'::bpchar) AND (n2.n_name = 'ARGENTINA'::bpchar)) OR ((n1.n_name = 'ARGENTINA'::bpchar) AND (n2.n_name = 'INDIA'::bpchar)))
+                                                   ->  Index Scan using pk_nation on nation n1  (cost=0.00..12.63 rows=25 width=30)
+                                                   ->  Materialize  (cost=0.00..1.38 rows=25 width=30)
+                                                         ->  Seq Scan on nation n2  (cost=0.00..1.25 rows=25 width=30)
+                                             ->  Bitmap Heap Scan on customer  (cost=905.09..6455.63 rows=60000 width=8)
+                                                   Recheck Cond: (c_nationkey = n2.n_nationkey)
+                                                   ->  Bitmap Index Scan on customer_c_nationkey_c_custkey_idx  (cost=0.00..890.09 rows=60000 width=0)
+                                                         Index Cond: (c_nationkey = n2.n_nationkey)
+               ->  Hash  (cost=3179.00..3179.00 rows=100000 width=8)
+                     ->  Seq Scan on supplier  (cost=0.00..3179.00 rows=100000 width=8)
+(28 rows)
+
+COMMIT;
+COMMIT

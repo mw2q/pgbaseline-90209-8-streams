@@ -1,0 +1,62 @@
+BEGIN;
+BEGIN
+EXPLAIN
+select
+	c_custkey,
+	c_name,
+	sum(l_extendedprice * (1 - l_discount)) as revenue,
+	c_acctbal,
+	n_name,
+	c_address,
+	c_phone,
+	c_comment
+from
+	customer,
+	orders,
+	lineitem,
+	nation
+where
+	c_custkey = o_custkey
+	and l_orderkey = o_orderkey
+	and o_orderdate >= date '1994-02-01'
+	and o_orderdate < cast(date '1994-02-01' + interval '3 month' as date)
+	and l_returnflag = 'R'
+	and c_nationkey = n_nationkey
+group by
+	c_custkey,
+	c_name,
+	c_acctbal,
+	c_phone,
+	n_name,
+	c_address,
+	c_comment
+order by
+	revenue desc
+LIMIT 20;
+                                                                      QUERY PLAN                                                                      
+------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=1176287.64..1176287.69 rows=20 width=176)
+   ->  Sort  (cost=1176287.64..1177652.28 rows=545858 width=176)
+         Sort Key: (sum((lineitem.l_extendedprice * (1::double precision - lineitem.l_discount))))
+         ->  HashAggregate  (cost=1156303.97..1161762.55 rows=545858 width=176)
+               ->  Hash Join  (cost=395575.45..1142657.52 rows=545858 width=176)
+                     Hash Cond: (customer.c_nationkey = nation.n_nationkey)
+                     ->  Hash Join  (cost=395573.89..1135150.41 rows=545858 width=154)
+                           Hash Cond: (orders.o_custkey = customer.c_custkey)
+                           ->  Merge Join  (cost=326545.89..1055205.25 rows=545858 width=12)
+                                 Merge Cond: (orders.o_orderkey = lineitem.l_orderkey)
+                                 ->  Sort  (cost=326545.87..327932.89 rows=554807 width=8)
+                                       Sort Key: orders.o_orderkey
+                                       ->  Bitmap Heap Scan on orders  (cost=11768.67..273612.77 rows=554807 width=8)
+                                             Recheck Cond: ((o_orderdate >= '1994-02-01'::date) AND (o_orderdate < '1994-05-01'::date))
+                                             ->  Bitmap Index Scan on orders_o_orderdate_o_orderkey_idx  (cost=0.00..11629.97 rows=554807 width=0)
+                                                   Index Cond: ((o_orderdate >= '1994-02-01'::date) AND (o_orderdate < '1994-05-01'::date))
+                                 ->  Index Scan using lineitem_l_orderkey_idx_l_returnflag on lineitem  (cost=0.00..683494.79 rows=14772795 width=12)
+                           ->  Hash  (cost=50278.00..50278.00 rows=1500000 width=146)
+                                 ->  Seq Scan on customer  (cost=0.00..50278.00 rows=1500000 width=146)
+                     ->  Hash  (cost=1.25..1.25 rows=25 width=30)
+                           ->  Seq Scan on nation  (cost=0.00..1.25 rows=25 width=30)
+(21 rows)
+
+COMMIT;
+COMMIT

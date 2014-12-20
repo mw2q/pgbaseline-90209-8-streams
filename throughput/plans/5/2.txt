@@ -1,0 +1,89 @@
+BEGIN;
+BEGIN
+EXPLAIN
+select
+	s_acctbal,
+	s_name,
+	n_name,
+	p_partkey,
+	p_mfgr,
+	s_address,
+	s_phone,
+	s_comment
+from
+	part,
+	supplier,
+	partsupp,
+	nation,
+	region
+where
+	p_partkey = ps_partkey
+	and s_suppkey = ps_suppkey
+	and p_size = 34
+	and p_type like '%TIN'
+	and s_nationkey = n_nationkey
+	and n_regionkey = r_regionkey
+	and r_name = 'AFRICA'
+	and ps_supplycost = (
+		select
+			min(ps_supplycost)
+		from
+			partsupp,
+			supplier,
+			nation,
+			region
+		where
+			p_partkey = ps_partkey
+			and s_suppkey = ps_suppkey
+			and s_nationkey = n_nationkey
+			and n_regionkey = r_regionkey
+			and r_name = 'AFRICA'
+	)
+order by
+	s_acctbal desc,
+	n_name,
+	s_name,
+	p_partkey
+LIMIT 100;
+                                                       QUERY PLAN                                                        
+-------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=828352.10..828352.11 rows=1 width=190)
+   ->  Sort  (cost=828352.10..828352.11 rows=1 width=190)
+         Sort Key: public.supplier.s_acctbal, public.nation.n_name, public.supplier.s_name, part.p_partkey
+         ->  Merge Join  (cost=395548.98..828352.09 rows=1 width=190)
+               Merge Cond: (part.p_partkey = public.partsupp.ps_partkey)
+               Join Filter: (public.partsupp.ps_supplycost = (SubPlan 1))
+               ->  Index Scan using pk_part on part  (cost=0.00..102473.47 rows=8097 width=30)
+                     Filter: (((p_type)::text ~~ '%TIN'::text) AND (p_size = 34))
+               ->  Sort  (cost=395548.97..399548.97 rows=1600000 width=168)
+                     Sort Key: public.partsupp.ps_partkey
+                     ->  Nested Loop  (cost=1.56..230671.85 rows=1600000 width=168)
+                           ->  Nested Loop  (cost=1.56..5806.62 rows=20000 width=164)
+                                 Join Filter: (public.nation.n_regionkey = public.region.r_regionkey)
+                                 ->  Seq Scan on region  (cost=0.00..1.06 rows=1 width=4)
+                                       Filter: (r_name = 'AFRICA'::bpchar)
+                                 ->  Hash Join  (cost=1.56..4555.56 rows=100000 width=168)
+                                       Hash Cond: (public.supplier.s_nationkey = public.nation.n_nationkey)
+                                       ->  Seq Scan on supplier  (cost=0.00..3179.00 rows=100000 width=142)
+                                       ->  Hash  (cost=1.25..1.25 rows=25 width=34)
+                                             ->  Seq Scan on nation  (cost=0.00..1.25 rows=25 width=34)
+                           ->  Index Scan using partsupp_ps_suppkey_idx on partsupp  (cost=0.00..10.44 rows=80 width=12)
+                                 Index Cond: (ps_suppkey = public.supplier.s_suppkey)
+               SubPlan 1
+                 ->  Aggregate  (cost=49.85..49.86 rows=1 width=4)
+                       ->  Nested Loop  (cost=0.00..49.84 rows=1 width=4)
+                             Join Filter: (public.nation.n_regionkey = public.region.r_regionkey)
+                             ->  Seq Scan on region  (cost=0.00..1.06 rows=1 width=4)
+                                   Filter: (r_name = 'AFRICA'::bpchar)
+                             ->  Nested Loop  (cost=0.00..48.73 rows=4 width=8)
+                                   ->  Nested Loop  (cost=0.00..47.61 rows=4 width=8)
+                                         ->  Index Scan using pk_partsupp on partsupp  (cost=0.00..14.45 rows=4 width=8)
+                                               Index Cond: (part.p_partkey = ps_partkey)
+                                         ->  Index Scan using pk_supplier on supplier  (cost=0.00..8.28 rows=1 width=8)
+                                               Index Cond: (s_suppkey = public.partsupp.ps_suppkey)
+                                   ->  Index Scan using pk_nation on nation  (cost=0.00..0.27 rows=1 width=8)
+                                         Index Cond: (n_nationkey = public.supplier.s_nationkey)
+(36 rows)
+
+COMMIT;
+COMMIT

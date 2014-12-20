@@ -1,0 +1,81 @@
+BEGIN;
+BEGIN
+EXPLAIN
+select
+	o_year,
+	sum(case
+		when nation = 'IRAQ' then volume
+		else 0
+	end) / sum(volume) as mkt_share
+from
+	(
+		select
+			extract(year from o_orderdate) as o_year,
+			l_extendedprice * (1 - l_discount) as volume,
+			n2.n_name as nation
+		from
+			part,
+			supplier,
+			lineitem,
+			orders,
+			customer,
+			nation n1,
+			nation n2,
+			region
+		where
+			p_partkey = l_partkey
+			and s_suppkey = l_suppkey
+			and l_orderkey = o_orderkey
+			and o_custkey = c_custkey
+			and c_nationkey = n1.n_nationkey
+			and n1.n_regionkey = r_regionkey
+			and r_name = 'MIDDLE EAST'
+			and s_nationkey = n2.n_nationkey
+			and o_orderdate between date '1995-01-01' and date '1996-12-31'
+			and p_type = 'STANDARD BRUSHED STEEL'
+	) as all_nations
+group by
+	o_year
+order by
+	o_year;
+                                                                         QUERY PLAN                                                                          
+-------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=2164581.23..2164583.05 rows=730 width=38)
+   Sort Key: (date_part('year'::text, (orders.o_orderdate)::timestamp without time zone))
+   ->  HashAggregate  (cost=2164533.74..2164546.51 rows=730 width=38)
+         ->  Nested Loop  (cost=495023.69..2164049.96 rows=24189 width=38)
+               ->  Nested Loop  (cost=495023.69..2157151.25 rows=24189 width=16)
+                     ->  Hash Join  (cost=495023.69..2150104.42 rows=24199 width=16)
+                           Hash Cond: (lineitem.l_orderkey = orders.o_orderkey)
+                           ->  Nested Loop  (cost=0.00..1652844.18 rows=398912 width=16)
+                                 ->  Index Only Scan using part_p_type_p_partkey_idx on part  (cost=0.00..46204.80 rows=13287 width=4)
+                                       Index Cond: (p_type = 'STANDARD BRUSHED STEEL'::text)
+                                 ->  Index Scan using lineitem_l_partkey_l_quantity_l_shipmode_idx on lineitem  (cost=0.00..120.61 rows=31 width=20)
+                                       Index Cond: (l_partkey = part.p_partkey)
+                           ->  Hash  (cost=483638.22..483638.22 rows=910837 width=8)
+                                 ->  Hash Join  (cost=135616.90..483638.22 rows=910837 width=8)
+                                       Hash Cond: (orders.o_custkey = customer.c_custkey)
+                                       ->  Bitmap Heap Scan on orders  (cost=96586.28..418421.04 rows=4554184 width=12)
+                                             Recheck Cond: ((o_orderdate >= '1995-01-01'::date) AND (o_orderdate <= '1996-12-31'::date))
+                                             ->  Bitmap Index Scan on orders_o_orderdate_o_orderkey_idx  (cost=0.00..95447.74 rows=4554184 width=0)
+                                                   Index Cond: ((o_orderdate >= '1995-01-01'::date) AND (o_orderdate <= '1996-12-31'::date))
+                                       ->  Hash  (cost=35280.62..35280.62 rows=300000 width=4)
+                                             ->  Nested Loop  (cost=906.17..35280.62 rows=300000 width=4)
+                                                   ->  Hash Join  (cost=1.07..2.47 rows=5 width=4)
+                                                         Hash Cond: (n1.n_regionkey = region.r_regionkey)
+                                                         ->  Seq Scan on nation n1  (cost=0.00..1.25 rows=25 width=8)
+                                                         ->  Hash  (cost=1.06..1.06 rows=1 width=4)
+                                                               ->  Seq Scan on region  (cost=0.00..1.06 rows=1 width=4)
+                                                                     Filter: (r_name = 'MIDDLE EAST'::bpchar)
+                                                   ->  Bitmap Heap Scan on customer  (cost=905.09..6455.63 rows=60000 width=8)
+                                                         Recheck Cond: (c_nationkey = n1.n_nationkey)
+                                                         ->  Bitmap Index Scan on customer_c_nationkey_c_custkey_idx  (cost=0.00..890.09 rows=60000 width=0)
+                                                               Index Cond: (c_nationkey = n1.n_nationkey)
+                     ->  Index Scan using pk_supplier on supplier  (cost=0.00..0.28 rows=1 width=8)
+                           Index Cond: (s_suppkey = lineitem.l_suppkey)
+               ->  Index Scan using pk_nation on nation n2  (cost=0.00..0.27 rows=1 width=30)
+                     Index Cond: (n_nationkey = supplier.s_nationkey)
+(35 rows)
+
+COMMIT;
+COMMIT

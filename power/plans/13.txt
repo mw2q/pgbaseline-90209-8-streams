@@ -1,0 +1,39 @@
+BEGIN;
+BEGIN
+EXPLAIN
+select
+	c_count,
+	count(*) as custdist
+from
+	(
+		select
+			c_custkey,
+			count(o_orderkey)
+		from
+			customer left outer join orders on
+				c_custkey = o_custkey
+				and o_comment not like '%special%deposits%'
+		group by
+			c_custkey
+	) as c_orders (c_custkey, c_count)
+group by
+	c_count
+order by
+	custdist desc,
+	c_count desc;
+                                           QUERY PLAN                                           
+------------------------------------------------------------------------------------------------
+ Sort  (cost=918569.87..918570.37 rows=200 width=8)
+   Sort Key: (count(*)), (count(orders.o_orderkey))
+   ->  HashAggregate  (cost=918560.23..918562.23 rows=200 width=8)
+         ->  HashAggregate  (cost=881060.23..896060.23 rows=1500000 width=8)
+               ->  Hash Right Join  (cost=69028.00..806807.58 rows=14850529 width=8)
+                     Hash Cond: (orders.o_custkey = customer.c_custkey)
+                     ->  Seq Scan on orders  (cost=0.00..440769.00 rows=14850529 width=8)
+                           Filter: ((o_comment)::text !~~ '%special%deposits%'::text)
+                     ->  Hash  (cost=50278.00..50278.00 rows=1500000 width=4)
+                           ->  Seq Scan on customer  (cost=0.00..50278.00 rows=1500000 width=4)
+(10 rows)
+
+COMMIT;
+COMMIT
